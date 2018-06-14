@@ -1,0 +1,95 @@
+
+    body {
+      background-image: url("http://bg.siteorigin.com/image/generate/download?color=%23d41e6&pattern=whitediamond&blend=20&intensity=12.00&noise=0.00&invert=on");
+      opacity: 50%;
+      background-repeat: repeat-y &;
+      background-size: 10vw 14vw;
+    }
+
+    header {
+    }
+
+    h1 {
+      position: relative;
+      margin-bottom: -3.6vw;
+      color: rgb(180, 48, 167);
+      font-family: "Trebuchet MS", cursive;
+      font-size: calc(8px + 7.8vw);
+      text-align: center;
+
+    }
+
+    h2 {
+      position: relative;
+      margin-bottom: 200px;
+      color: rgb(45, 29, 224);
+      font-family: "helvetica", cursive;
+      font-size: calc(6px + 1.5vw);
+      text-align: right;
+      margin-right: 9.32vw;
+    }
+
+    p {
+      font-family: relative;
+      font-size: 14px;
+      color: rgb(22, 22, 82);
+      position: relative;
+      transition: transform .22s; /* Animation */
+    }
+
+    table p:hover {
+        transform:scale(1.2); /* (150% zoom - Note: if the zoom is too large, it will go outside of the viewport) */
+        width: 100%;
+        height: 100%;
+    }
+
+    table a:link, a:visited, a:active {
+        text-decoration: none;
+        background-color: rgba(191, 176, 187, 0.20);
+        font-family: "Trebuchet MS";
+        font-size: calc(6px + .6vw);
+        text-align-last: center;
+        font-weight: bold;
+        padding: calc(6px + .2vw);
+        border: calc(.6px + .2vw) solid rgba(161, 197, 221, 0.40);
+        border-radius: 100%; /* was 24pt */
+        display: block;
+        color: rgb(35, 32, 40);
+        transition: transform .23s; /* zoom-animatie */
+    }
+
+    table a:hover {
+        transform: scale(1.8); /* (150% zoom - Note: if the zoom is too large, it will go outside of the viewport) */
+        background-color: rgba(161, 197, 221, 0.80);
+        color: rgb(180, 48, 167)
+    }
+
+    table a:focus {
+      color: rgb(255, 255, 255);
+    }
+
+    #table_id {
+      display: table;
+    }
+
+    #table_id td {
+      display: inline-block;
+    }
+
+    .whole_table {
+      width: 82vw;
+      margin: auto;
+
+    }
+
+    img#bach_hausmann_portret {
+      display: block;
+      margin-left: auto;
+      margin-right: auto;
+      width: 40%;
+      transition: transform .8s;
+
+}
+  #bach_hausmann_portret:hover {
+      transform: rotate(360deg);
+}
