@@ -1,12 +1,23 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed. Initializing app.js...");
 
+    // Display current time (as requested by user context, useful for them)
+    const timeElement = document.getElementById('currentTime');
+    if (timeElement) {
+        try {
+            timeElement.textContent = new Intl.DateTimeFormat('en-US', { dateStyle: 'full', timeStyle: 'long' }).format(new Date());
+        } catch (e) {
+            timeElement.textContent = new Date().toString(); // Fallback
+        }
+    }
+
+
     if (typeof alphaTab === 'undefined') {
-        console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML.");
-        alert("Error: AlphaTab library could not be loaded. The player will not work.");
-        return;
+        console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML and network tab for AlphaTab JS file.");
+        alert("Error: AlphaTab library could not be loaded. The player will not work. Please check browser console (F12) -> Network tab for errors loading 'alphaTab.js' from CDN.");
+        return; 
     } else {
-        console.log("AlphaTab library found.");
+        console.log("AlphaTab library object found. Version (if available via API):", alphaTab.version || "Not exposed");
     }
 
     const fileInput = document.getElementById('fileInput');
@@ -23,19 +34,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const setA415Button = document.getElementById('setA415');
     const playPauseButton = document.getElementById('playPauseButton');
     const stopButton = document.getElementById('stopButton');
-    const loadTestFileButton = document.getElementById('loadTestFileButton'); // Get the new button
+    const loadTestFileButton = document.getElementById('loadTestFileButton');
 
     let alphaTabApi = null;
-    let musicFilesFromInput = []; // Stores File objects from the user's file input
+    let musicFilesFromInput = [];
 
-    // --- Event Listeners ---
     fileInput.addEventListener('change', handleFileSelection);
     console.log("File input event listener attached.");
 
     if (loadTestFileButton) {
         loadTestFileButton.addEventListener('click', () => {
-            // Path to the local test file within your project
-            const testFilePath = 'examples/Jesu_nun_sei.mxl'; // Make sure this path is correct
+            const testFilePath = 'examples/Jesu_nun_sei.mxl'; 
             const testFileName = 'Jesu, nun sei (Test File)';
             console.log(`"Load Test File" button clicked. Attempting to load: ${testFilePath}`);
             loadAndProcessFileFromPath(testFilePath, testFileName);
@@ -44,7 +53,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
         console.warn("Test file button not found in HTML.");
     }
-
 
     function handleFileSelection(event) {
         console.log("handleFileSelection triggered.");
@@ -62,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
             li.textContent = 'No compatible files selected (XML, MusicXML, MXL).';
             fileListDisplay.appendChild(li);
             currentSongTitle.textContent = 'No compatible files found.';
-            resetPlayerUiOnly(); // Don't fully reset if API is okay, just UI part.
+            resetPlayerUiOnly();
             return;
         }
 
@@ -71,7 +79,6 @@ document.addEventListener('DOMContentLoaded', () => {
             const li = document.createElement('li');
             li.textContent = musicFilesFromInput[0].name;
             fileListDisplay.appendChild(li);
-            // Read the File object and then process
             readFileObjectAndProcess(musicFilesFromInput[0], li);
         } else {
             console.log("Multiple files selected, listing them. User needs to click to load.");
@@ -89,11 +96,10 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function readFileObjectAndProcess(fileObject, listItem) {
         console.log(`readFileObjectAndProcess called for: ${fileObject.name}`);
-        // Update active item in the list for visual feedback
         document.querySelectorAll('#fileList li').forEach(li => li.classList.remove('active'));
         if (listItem) {
             listItem.classList.add('active');
-        } else { // If called without listItem, try to find it (e.g. for single auto-load)
+        } else {
              const items = Array.from(fileListDisplay.children);
              const itemToActivate = items.find(item => item.textContent === fileObject.name);
              if (itemToActivate) itemToActivate.classList.add('active');
@@ -106,7 +112,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.error(`Error reading file object ${fileObject.name}:`, error);
             currentSongTitle.textContent = `Error reading file: ${error.message}. See console.`;
             alert(`Error reading file ${fileObject.name}: ${error.message}`);
-            // Potentially reset more UI elements or show specific error in alphaTabSurface
             musicDisplayFallback.innerHTML = `<p>Error reading ${fileObject.name}.</p>`;
             musicDisplayFallback.style.display = 'block';
             alphaTabSurface.style.display = 'none';
@@ -115,7 +120,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function loadAndProcessFileFromPath(filePath, displayFileName) {
         console.log(`loadAndProcessFileFromPath: Fetching ${filePath}`);
-        // Clear file list and mark nothing as active from user input
         fileListDisplay.innerHTML = '';
         document.querySelectorAll('#fileList li').forEach(li => li.classList.remove('active'));
         try {
@@ -150,9 +154,12 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (alphaTabApi) {
                 console.log("Existing AlphaTab API instance found, cleaning up...");
-                // Consider if alphaTabApi.destroy() or similar is available and needed.
-                alphaTabApi = null; // Dereference
-                alphaTabSurface.innerHTML = ''; // Clear previous score
+                if (typeof alphaTabApi.destroy === 'function') { // Check if destroy method exists
+                    alphaTabApi.destroy();
+                    console.log("Called alphaTabApi.destroy()");
+                }
+                alphaTabApi = null;
+                alphaTabSurface.innerHTML = ''; 
                 console.log("Previous AlphaTab instance artifacts cleared.");
             }
 
@@ -161,18 +168,18 @@ document.addEventListener('DOMContentLoaded', () => {
                 player: {
                     enablePlayer: true,
                     enableUserInteraction: true,
-                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/soundfont/sonivox.sf2",
-                    scrollElement: alphaTabSurface.parentElement, // For auto-scrolling
+                    // Updated to specific version 1.3.1
+                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/soundfont/sonivox.sf2", 
+                    scrollElement: alphaTabSurface.parentElement, 
                 },
             };
-            console.log("AlphaTab settings prepared.");
+            console.log("AlphaTab settings prepared:", settings);
 
-            alphaTabSurface.innerHTML = ''; // Ensure container is clean before AlphaTab takes over
+            alphaTabSurface.innerHTML = ''; 
             console.log("Initializing new AlphaTab API instance...");
-            alphaTabApi = new alphaTab.AlphaTabApi(alphaTabSurface, settings); // API is now available
+            alphaTabApi = new alphaTab.AlphaTabApi(alphaTabSurface, settings);
             console.log("AlphaTab API instance created.");
 
-            // Setup event handlers for the new API instance
             alphaTabApi.error.on((e) => {
                 console.error("AlphaTab reported an error:", e);
                 let errorMessage = "An error occurred with AlphaTab.";
@@ -188,7 +195,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 currentSongTitle.textContent = `AlphaTab Error: ${errorMessage}`;
                 alert(`AlphaTab Error: ${errorMessage}`);
-                resetPlayerUiOnly(); // Reset UI but don't nullify alphaTabApi here as it's local to this error
+                resetPlayerUiOnly();
                 alphaTabSurface.style.display = 'none';
                 musicDisplayFallback.innerHTML = `<p>AlphaTab Error: ${errorMessage}</p>`;
                 musicDisplayFallback.style.display = 'block';
@@ -199,7 +206,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (score) {
                     currentSongTitle.textContent = `${score.title || fileNameToDisplay} - ${score.artist || 'Unknown Artist'}`;
                     setupAlphaTabPartControls(score.tracks);
-                    setupAlphaTabPlayerControls(); // Re-initialize controls for the new score/player instance
+                    setupAlphaTabPlayerControls();
                     playPauseButton.disabled = false;
                     stopButton.disabled = false;
                     if (alphaTabApi && alphaTabApi.player) {
@@ -227,14 +234,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 playPauseButton.textContent = 'Play';
             });
 
-        } catch (error) { // Catch errors during AlphaTab init or critical errors in this function
+        } catch (error) {
             console.error(`Critical error in processAndDisplayScore for ${fileNameToDisplay}:`, error);
             currentSongTitle.textContent = `Error processing score: ${error.message}. See console.`;
             alert(`Error processing score ${fileNameToDisplay}: ${error.message}.`);
             alphaTabSurface.style.display = 'none';
             musicDisplayFallback.style.display = 'block';
             musicDisplayFallback.innerHTML = `<p>Error processing ${fileNameToDisplay}.</p>`;
-            resetPlayerUiOnly(); // Reset relevant UI parts
+            resetPlayerUiOnly();
         }
     }
 
@@ -254,10 +261,9 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
-    // Resets UI elements related to player, doesn't touch alphaTabApi instance itself
     function resetPlayerUiOnly() {
         console.log("resetPlayerUiOnly called.");
-        alphaTabSurface.innerHTML = ''; // Clear previous score display
+        alphaTabSurface.innerHTML = ''; 
         alphaTabSurface.style.display = 'none';
         musicDisplayFallback.style.display = 'block';
         musicDisplayFallback.innerHTML = '<p>Select a file or load test file.</p>';
@@ -266,57 +272,32 @@ document.addEventListener('DOMContentLoaded', () => {
         playPauseButton.textContent = 'Play';
         stopButton.disabled = true;
         currentSongTitle.textContent = 'No file loaded';
-         // fileInput.value = null; // Clearing file input is tricky and often not fully effective/desirable
-    }
-
-    function fullResetAndClearPlayer() {
-        console.log("fullResetAndClearPlayer called.");
-        if (alphaTabApi) {
-            // If AlphaTab offers a destroy/dispose, it should be called here.
-            // For example: if (alphaTabApi.dispose) alphaTabApi.dispose();
-            console.log("Clearing AlphaTab API instance.");
-            alphaTabApi = null;
-        }
-        resetPlayerUiOnly();
-        fileListDisplay.innerHTML = ''; // Also clear the list of files from input
     }
     
-    // Initial UI state
-    resetPlayerUiOnly(); // Use the UI only reset at the start
+    resetPlayerUiOnly(); 
     console.log("Initial player UI reset complete.");
 
-    // --- AlphaTab Part Controls (function definitions remain the same) ---
     function setupAlphaTabPartControls(tracks) {
-        // ... (same as your previous version, ensure console.logs are there if debugging parts)
-        // console.log("setupAlphaTabPartControls called with tracks:", tracks);
         partsListContainer.innerHTML = '';
-
         if (!tracks || tracks.length === 0) {
             partsListContainer.innerHTML = '<p>No parts (tracks) found in this score.</p>';
-            // console.log("No tracks found to set up controls.");
             return;
         }
-        // console.log(`Setting up controls for ${tracks.length} tracks.`);
-
         tracks.forEach((track, index) => {
             const partDiv = document.createElement('div');
             partDiv.classList.add('part-controls-item');
             partDiv.dataset.trackIndex = index;
-
             const title = document.createElement('h4');
             title.textContent = track.name || `Track ${index + 1}`;
             partDiv.appendChild(title);
-
             const muteButton = document.createElement('button');
             muteButton.textContent = track.playbackInfo.isMute ? 'Unmute' : 'Mute';
             muteButton.addEventListener('click', () => toggleMuteTrack(track, muteButton));
             partDiv.appendChild(muteButton);
-
             const highlightButton = document.createElement('button');
             highlightButton.textContent = 'Highlight';
             highlightButton.addEventListener('click', () => toggleHighlightPartControl(partDiv, track));
             partDiv.appendChild(highlightButton);
-
             const volumeLabel = document.createElement('label');
             volumeLabel.textContent = 'Volume:';
             volumeLabel.htmlFor = `volume-track-${index}`;
@@ -330,25 +311,18 @@ document.addEventListener('DOMContentLoaded', () => {
             volumeSlider.addEventListener('input', (e) => setTrackVolume(track, parseFloat(e.target.value)));
             partDiv.appendChild(volumeLabel);
             partDiv.appendChild(volumeSlider);
-
             partsListContainer.appendChild(partDiv);
         });
-        // console.log("Part controls UI created.");
     }
 
     function toggleMuteTrack(track, button) {
-        if (!alphaTabApi || !track || !track.playbackInfo) {
-            console.error("Cannot toggle mute: AlphaTab API or track/playbackInfo missing.");
-            return;
-        }
+        if (!alphaTabApi || !track || !track.playbackInfo) return;
         track.playbackInfo.isMute = !track.playbackInfo.isMute;
         button.textContent = track.playbackInfo.isMute ? 'Unmute' : 'Mute';
-        // console.log(`Track "${track.name}" mute toggled to: ${track.playbackInfo.isMute}`);
     }
 
     let highlightedPartControlDiv = null;
     function toggleHighlightPartControl(partDiv, track) {
-        // console.log(`toggleHighlightPartControl for track: ${track.name}`);
         if (highlightedPartControlDiv === partDiv) { 
             partDiv.classList.remove('part-control-highlighted');
             highlightedPartControlDiv = null;
@@ -366,17 +340,14 @@ document.addEventListener('DOMContentLoaded', () => {
         track.playbackInfo.volume = volume;
     }
 
-    // --- AlphaTab Master Player Controls (function definition remains the same) ---
     function setupAlphaTabPlayerControls() {
-        // console.log("setupAlphaTabPlayerControls called.");
         if (!alphaTabApi || !alphaTabApi.player) {
             console.error("Cannot setup player controls: AlphaTab API or player not ready.");
-            playPauseButton.disabled = true; // Ensure buttons are disabled if player not ready
+            playPauseButton.disabled = true;
             stopButton.disabled = true;
             return;
         }
-        
-        playPauseButton.disabled = false; // Enable buttons now that player is ready
+        playPauseButton.disabled = false;
         stopButton.disabled = false;
 
         masterVolumeSlider.oninput = (event) => {
@@ -398,7 +369,6 @@ document.addEventListener('DOMContentLoaded', () => {
             alphaTabApi.player.masterTune = initialCents;
             centsValueDisplay.textContent = `${initialCents} cents`;
         }
-
 
         setA440Button.onclick = () => {
             if (alphaTabApi && alphaTabApi.player) {
@@ -424,6 +394,5 @@ document.addEventListener('DOMContentLoaded', () => {
         stopButton.onclick = () => {
             if (alphaTabApi && alphaTabApi.player) alphaTabApi.player.stop();
         };
-        // console.log("Master player controls event listeners reassigned/set.");
     }
 });
