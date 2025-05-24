@@ -4,21 +4,20 @@ document.addEventListener('DOMContentLoaded', () => {
     const timeElement = document.getElementById('currentTime');
     if (timeElement) {
         try {
-            // Display time in CEST (Utrecht's timezone)
             const now = new Date();
             timeElement.textContent = new Intl.DateTimeFormat('en-GB', {
                 dateStyle: 'full',
                 timeStyle: 'long',
-                timeZone: 'Europe/Amsterdam' // Utrecht is in this timezone (CEST/CET)
+                timeZone: 'Europe/Amsterdam' 
             }).format(now);
         } catch (e) {
-            timeElement.textContent = new Date().toString(); // Fallback
+            timeElement.textContent = new Date().toString(); 
             console.warn("Could not display time in CEST, using browser default.", e);
         }
     }
 
     if (typeof alphaTab === 'undefined') {
-        console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML and network tab for AlphaTab JS file.");
+        console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML (especially if it's in <head>) and network tab for AlphaTab JS file.");
         alert("Error: AlphaTab library could not be loaded. The player will not work. Please check browser console (F12) -> Network tab for errors loading 'alphaTab.js' from CDN.");
         return; 
     } else {
@@ -89,7 +88,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Multiple files selected, listing them. User needs to click to load.");
             musicFilesFromInput.forEach((file) => {
                 const li = document.createElement('li');
-                li.textContent = file..name;
+                li.textContent = file.name;
                 li.addEventListener('click', () => {
                     console.log(`List item clicked for file: ${file.name}`);
                     readFileObjectAndProcess(file, li);
@@ -173,8 +172,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 player: {
                     enablePlayer: true,
                     enableUserInteraction: true,
-                    // Updated to specific version 1.5.0
-                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.5.0/dist/soundfont/sonivox.sf2", 
+                    // Using @latest for consistency with AlphaTab JS library include
+                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/soundfont/sonivox.sf2", 
                     scrollElement: alphaTabSurface.parentElement, 
                 },
             };
@@ -182,7 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             alphaTabSurface.innerHTML = ''; 
             console.log("Initializing new AlphaTab API instance...");
-            alphaTabApi = new alphaTab.AlphaTabApi(alphaTabSurface, settings);
+            alphaTabApi = new alphaTab.AlphaTabApi(alphaTabSurface, settings); // The 'main' element from tutorial is our alphaTabSurface
             console.log("AlphaTab API instance created.");
 
             alphaTabApi.error.on((e) => {
@@ -363,7 +362,10 @@ document.addEventListener('DOMContentLoaded', () => {
         if (alphaTabApi.player) alphaTabApi.player.masterVolume = parseFloat(masterVolumeSlider.value);
 
         masterCentsSlider.oninput = (event) => {
-            if (alphaTabApi && alphaTabApi.player) {
+            if (alphaTabApiexport const environment = {
+    production: true,
+    name: 'PROD'
+}; && alphaTabApi.player) {
                 const cents = parseInt(event.target.value);
                 alphaTabApi.player.masterTune = cents;
                 centsValueDisplay.textContent = `${cents} cents`;
