@@ -1,23 +1,28 @@
 document.addEventListener('DOMContentLoaded', () => {
     console.log("DOM fully loaded and parsed. Initializing app.js...");
 
-    // Display current time (as requested by user context, useful for them)
     const timeElement = document.getElementById('currentTime');
     if (timeElement) {
         try {
-            timeElement.textContent = new Intl.DateTimeFormat('en-US', { dateStyle: 'full', timeStyle: 'long' }).format(new Date());
+            // Display time in CEST (Utrecht's timezone)
+            const now = new Date();
+            timeElement.textContent = new Intl.DateTimeFormat('en-GB', {
+                dateStyle: 'full',
+                timeStyle: 'long',
+                timeZone: 'Europe/Amsterdam' // Utrecht is in this timezone (CEST/CET)
+            }).format(now);
         } catch (e) {
             timeElement.textContent = new Date().toString(); // Fallback
+            console.warn("Could not display time in CEST, using browser default.", e);
         }
     }
-
 
     if (typeof alphaTab === 'undefined') {
         console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML and network tab for AlphaTab JS file.");
         alert("Error: AlphaTab library could not be loaded. The player will not work. Please check browser console (F12) -> Network tab for errors loading 'alphaTab.js' from CDN.");
         return; 
     } else {
-        console.log("AlphaTab library object found. Version (if available via API):", alphaTab.version || "Not exposed");
+        console.log("AlphaTab library object found. Version (if available via API):", alphaTab.version || "Not exposed in this version object");
     }
 
     const fileInput = document.getElementById('fileInput');
@@ -84,7 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log("Multiple files selected, listing them. User needs to click to load.");
             musicFilesFromInput.forEach((file) => {
                 const li = document.createElement('li');
-                li.textContent = file.name;
+                li.textContent = file..name;
                 li.addEventListener('click', () => {
                     console.log(`List item clicked for file: ${file.name}`);
                     readFileObjectAndProcess(file, li);
@@ -154,7 +159,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             if (alphaTabApi) {
                 console.log("Existing AlphaTab API instance found, cleaning up...");
-                if (typeof alphaTabApi.destroy === 'function') { // Check if destroy method exists
+                if (typeof alphaTabApi.destroy === 'function') { 
                     alphaTabApi.destroy();
                     console.log("Called alphaTabApi.destroy()");
                 }
@@ -168,8 +173,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 player: {
                     enablePlayer: true,
                     enableUserInteraction: true,
-                    // Updated to specific version 1.3.1
-                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.3.1/dist/soundfont/sonivox.sf2", 
+                    // Updated to specific version 1.5.0
+                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@1.5.0/dist/soundfont/sonivox.sf2", 
                     scrollElement: alphaTabSurface.parentElement, 
                 },
             };
