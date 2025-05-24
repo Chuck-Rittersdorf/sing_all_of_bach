@@ -1,309 +1,420 @@
 document.addEventListener('DOMContentLoaded', () => {
+    console.log("DOM fully loaded and parsed. Initializing app.js...");
+
+    // Check if AlphaTab library is loaded
+    if (typeof alphaTab === 'undefined') {
+        console.error("AlphaTab library is NOT loaded! Check the script tag in your HTML.");
+        alert("Error: AlphaTab library could not be loaded. The player will not work.");
+        return; // Stop initialization if AlphaTab is missing
+    } else {
+        console.log("AlphaTab library found.");
+    }
+
     const fileInput = document.getElementById('fileInput');
     const fileListDisplay = document.getElementById('fileList');
     const currentSongTitle = document.getElementById('current-song-title');
-    const musicDisplay = document.getElementById('music-display'); // Where OSMD or similar would render
+    const alphaTabSurface = document.getElementById('alphaTabSurface');
+    const musicDisplayFallback = document.getElementById('music-display-fallback');
     const partsListContainer = document.getElementById('parts-list-container');
 
     const masterVolumeSlider = document.getElementById('masterVolume');
     const masterCentsSlider = document.getElementById('masterCents');
     const centsValueDisplay = document.getElementById('centsValue');
+    const setA440Button = document.getElementById('setA440');
+    const setA415Button = document.getElementById('setA415');
     const playPauseButton = document.getElementById('playPauseButton');
     const stopButton = document.getElementById('stopButton');
 
-    let selectedFile = null;
-    let musicFiles = [];
-    let audioContext; // For Web Audio API
-    let scorePlayer; // This would be an instance of your MusicXML playback library object
-
-    // --- Initialize Web Audio API (important for audio manipulation) ---
-    try {
-        audioContext = new (window.AudioContext || window.webkitAudioContext)();
-    } catch (e) {
-        alert('Web Audio API is not supported in this browser');
-        console.error("Web Audio API not supported", e);
-    }
+    let alphaTabApi = null;
+    let musicFiles = []; // This will store the File objects from the input
+    let selectedFileObject = null; // The actual File object being processed
 
     // --- File Handling ---
-    fileInput.addEventListener('change', handleFileSelect);
+    fileInput.addEventListener('change', handleFileSelection);
+    console.log("File input event listener attached.");
+
     function handleFileSelection(event) {
+        console.log("handleFileSelection triggered.");
         fileListDisplay.innerHTML = ''; // Clear previous list
-        musicFiles = Array.from(event.target.files).filter(file =>
+        const allSelectedFiles = Array.from(event.target.files);
+        console.log(`User selected ${allSelectedFiles.length} file(s) in dialog.`);
+
+        musicFiles = allSelectedFiles.filter(file =>
             file.name.toLowerCase().endsWith('.xml') || file.name.toLowerCase().endsWith('.musicxml')
         );
+        console.log(`Found ${musicFiles.length} MusicXML file(s) among selected.`);
 
         if (musicFiles.length === 0) {
             const li = document.createElement('li');
-            li.textContent = 'No MusicXML files selected.'; // <-- Updated message
+            li.textContent = 'No MusicXML files selected.';
             fileListDisplay.appendChild(li);
             currentSongTitle.textContent = 'No MusicXML files found.';
             resetPlayer();
+            console.log("No MusicXML files found or selected.");
             return;
         }
 
-        musicFiles.forEach((file, index) => {
-            const li = document.createElement('li');
-            li.textContent = file.name;
-            li.dataset.fileIndex = index;
-            li.addEventListener('click', () => loadAndDisplayFile(file, li));
+        // If only one MusicXML file is selected, load it automatically.
+        if (musicFiles.length === 1) {
+            console.log("One MusicXML file selected, attempting to load automatically:", musicFiles[0].name);
+            const li = document.createElement('li'); // Still create list item for visual feedback
+            li.textContent = musicFiles[0].name;
             fileListDisplay.appendChild(li);
-        });
+            loadAndDisplayFile(musicFiles[0], li);
+        } else {
+            // If multiple MusicXML files, list them and require a click.
+            console.log("Multiple MusicXML files selected, listing them. User needs to click to load.");
+            musicFiles.forEach((file) => { // No need for index here for dataset.fileIndex if 'file' object is passed directly
+                const li = document.createElement('li');
+                li.textContent = file.name;
+                li.addEventListener('click', () => {
+                    console.log(`List item clicked for file: ${file.name}`);
+                    loadAndDisplayFile(file, li);
+                });
+                fileListDisplay.appendChild(li);
+            });
+        }
     }
 
-    async function loadAndDisplayFile(file, listItem) {
-        if (selectedFile === file) return; // Avoid reloading the same file
-
-        selectedFile = file;
+    async function loadAndDisplayFile(fileToLoad, listItem) {
+        console.log(`loadAndDisplayFile called for: ${fileToLoad ? fileToLoad.name : 'undefined file'}`);
+        if (!fileToLoad) {
+            console.error("loadAndDisplayFile: fileToLoad is undefined.");
+            currentSongTitle.textContent = `Error: No file provided to load.`;
+            return;
+        }
+        selectedFileObject = fileToLoad;
 
         // Update active item in the list
         document.querySelectorAll('#fileList li').forEach(li => li.classList.remove('active'));
-        if (listItem) listItem.classList.add('active');
+        if (listItem) {
+            listItem.classList.add('active');
+            console.log(`Set list item "${listItem.textContent}" as active.`);
+        } else {
+            // If loaded automatically, find the corresponding list item to mark active (if exists)
+            const items = Array.from(fileListDisplay.children);
+            const itemToActivate = items.find(item => item.textContent === fileToLoad.name);
+            if (itemToActivate) {
+                itemToActivate.classList.add('active');
+                console.log(`Automatically loaded file, set list item "${itemToActivate.textContent}" as active.`);
+            }
+        }
 
-        currentSongTitle.textContent = `Playing: ${file.name}`;
-        musicDisplay.innerHTML = `<p>Loading ${file.name}...</p>`; // Placeholder
-        partsListContainer.innerHTML = '<p>Loading parts...</p>';
+
+        currentSongTitle.textContent = `Loading: ${selectedFileObject.name}...`;
+        partsListContainer.innerHTML = '<p>Loading score data...</p>';
+        playPauseButton.disabled = true;
+        stopButton.disabled = true;
+        musicDisplayFallback.style.display = 'none';
+        alphaTabSurface.style.display = 'block'; // Make sure surface is visible
+        console.log("UI prepared for loading.");
 
         try {
-            const fileContent = await readFileAsText(file);
+            console.log("Attempting to read file as ArrayBuffer...");
+            const fileBuffer = await readFileAsArrayBuffer(selectedFileObject);
+            console.log("File read successfully. ArrayBuffer length:", fileBuffer.byteLength);
 
-            // --- THIS IS WHERE YOUR MUSICXML LIBRARY COMES IN ---
-            // Example with a hypothetical library:
-            // if (scorePlayer) {
-            //     scorePlayer.stop(); // Stop previous playback
-            //     scorePlayer.destroy(); // Clean up previous instance
-            // }
-            // scorePlayer = new YourMusicXMLLibrary(musicDisplay, audioContext); // Initialize with display element and audio context
-            // await scorePlayer.load(fileContent); // Load the XML content
-            // renderScore(scorePlayer); // Visually render the score
-            // setupPartControls(scorePlayer.getParts()); // Get parts from the library
-            // setupPlayerControls(scorePlayer);
+            if (alphaTabApi) {
+                console.log("Existing AlphaTab API instance found, attempting to clean up...");
+                // Proper disposal might be needed if AlphaTab provides a `destroy` or `dispose` method.
+                // For now, re-initializing is often okay for simpler cases.
+                // alphaTabApi.destroy(); // If available
+                alphaTabApi = null; // Dereference to allow garbage collection
+                alphaTabSurface.innerHTML = ''; // Clear previous score
+                console.log("Previous AlphaTab instance cleared.");
+            }
 
-            // Placeholder for actual library integration:
-            musicDisplay.innerHTML = `<p>Visual representation of "${file.name}" would be here.</p><p><pre>${escapeHtml(fileContent.substring(0, 1000))}...</pre></p><p style="color:red;">(Full rendering and playback requires a MusicXML library integration)</p>`;
-            partsListContainer.innerHTML = '<p>Part controls would appear here after loading the score with a MusicXML library.</p>';
-            // Simulate part loading for demonstration
-            const simulatedParts = [
-                { id: 'P1', name: 'Soprano' },
-                { id: 'P2', name: 'Alto' },
-                { id: 'P3', name: 'Tenor' },
-                { id: 'P4', name: 'Bass' }
-            ];
-            setupPartControls(simulatedParts);
+            const settings = {
+                file: fileBuffer,
+                player: {
+                    enablePlayer: true,
+                    enableUserInteraction: true,
+                    soundFont: "https://cdn.jsdelivr.net/npm/@coderline/alphatab@latest/dist/soundfont/sonivox.sf2",
+                    scrollElement: alphaTabSurface.parentElement,
+                },
+                // layout: { layoutMode: 'page' } // Example layout setting
+            };
+            console.log("AlphaTab settings prepared:", settings);
+
+            alphaTabSurface.innerHTML = ''; // Ensure container is empty before AlphaTab takes over
+            console.log("Initializing new AlphaTab API instance...");
+            alphaTabApi = new alphaTab.AlphaTabApi(alphaTabSurface, settings);
+            console.log("AlphaTab API instance created.");
+
+            alphaTabApi.scoreLoaded.on(score => {
+                console.log("AlphaTab event: scoreLoaded", score);
+                if (score) {
+                    currentScoreTracks = score.tracks;
+                    currentSongTitle.textContent = `${score.title || 'Untitled Score'} - ${score.artist || 'Unknown Artist'}`;
+                    setupAlphaTabPartControls(score.tracks);
+                    setupAlphaTabPlayerControls(); // Re-setup or update player controls
+                    playPauseButton.disabled = false;
+                    stopButton.disabled = false;
+                    // Apply initial master volume and cents from sliders
+                    if (alphaTabApi && alphaTabApi.player) {
+                         alphaTabApi.player.masterVolume = parseFloat(masterVolumeSlider.value);
+                         alphaTabApi.player.masterTune = parseInt(masterCentsSlider.value);
+                         console.log(`Initial masterVolume set to ${masterVolumeSlider.value}, masterTune to ${masterCentsSlider.value}`);
+                    }
+                } else {
+                    console.error("AlphaTab event: scoreLoaded - but score object is null/undefined!");
+                     currentSongTitle.textContent = `Error: Failed to properly load score data from ${selectedFileObject.name}.`;
+                     resetPlayer();
+                }
+            });
+
+            alphaTabApi.playerStateChanged.on(e => {
+                console.log("AlphaTab event: playerStateChanged", e);
+                playPauseButton.textContent = e.state === alphaTab.model.PlayerState.Playing ? 'Pause' : 'Play';
+            });
+
+            alphaTabApi.renderFinished.on(() => {
+                console.log("AlphaTab event: renderFinished. Score should be visible.");
+            });
+
+            alphaTabApi.playerFinished.on(() => {
+                console.log("AlphaTab event: playerFinished.");
+                playPauseButton.textContent = 'Play';
+            });
+
+            alphaTabApi.error.on((e) => {
+                console.error("AlphaTab reported an error:", e);
+                let errorMessage = "An error occurred with AlphaTab.";
+                if (e && e.message) {
+                    errorMessage = e.message;
+                } else if (typeof e === 'string') {
+                    errorMessage = e;
+                }
+                // Attempt to provide more specific info based on error type if possible
+                if (e && e.type === 'SoundFontLoad') {
+                    errorMessage = "Error loading SoundFont. Check network connection and SoundFont URL.";
+                } else if (e && e.type === 'ScoreLoad') {
+                    errorMessage = `Error loading the score: ${selectedFileObject.name}. It might be corrupted or not a supported MusicXML format.`;
+                }
+                currentSongTitle.textContent = `Error: ${errorMessage}`;
+                alert(`AlphaTab Error: ${errorMessage}`); // Also show an alert
+                resetPlayer();
+            });
 
 
         } catch (error) {
-            console.error('Error loading or parsing MusicXML:', error);
-            musicDisplay.innerHTML = `<p>Error loading ${file.name}. Check console.</p>`;
-            currentSongTitle.textContent = `Error loading file.`;
-            partsListContainer.innerHTML = '';
+            console.error('Critical error in loadAndDisplayFile:', error);
+            currentSongTitle.textContent = `Error processing file: ${error.message}. See console.`;
+            alert(`Error: ${error.message}. Please check the console for more details.`);
+            alphaTabSurface.style.display = 'none';
+            musicDisplayFallback.style.display = 'block';
+            musicDisplayFallback.innerHTML = `<p>Error loading ${selectedFileObject ? selectedFileObject.name : 'file'}. Check console for details.</p>`;
+            resetPlayer();
         }
     }
 
-    function readFileAsText(file) {
+    function readFileAsArrayBuffer(file) {
+        console.log(`readFileAsArrayBuffer called for ${file.name}`);
         return new Promise((resolve, reject) => {
             const reader = new FileReader();
-            reader.onload = event => resolve(event.target.result);
-            reader.onerror = error => reject(error);
-            reader.readAsText(file);
+            reader.onload = event => {
+                console.log(`File ${file.name} read successfully into ArrayBuffer.`);
+                resolve(event.target.result);
+            };
+            reader.onerror = error => {
+                console.error(`FileReader error for ${file.name}:`, error);
+                reject(error);
+            };
+            reader.readAsArrayBuffer(file);
         });
     }
 
-    function escapeHtml(unsafe) {
-        return unsafe
-             .replace(/&/g, "&amp;")
-             .replace(/</g, "&lt;")
-             .replace(/>/g, "&gt;")
-             .replace(/"/g, "&quot;")
-             .replace(/'/g, "&#039;");
-     }
+    function resetPlayer() {
+        console.log("resetPlayer called.");
+        if (alphaTabApi) {
+            console.log("Attempting to clean up existing AlphaTab API in resetPlayer.");
+            // If AlphaTab has a dispose/destroy method, call it here.
+            // alphaTabApi.dispose(); or alphaTabApi.destroy();
+            // For now, just nullify and clear the surface.
+            alphaTabApi = null;
+        }
+        alphaTabSurface.innerHTML = '';
+        alphaTabSurface.style.display = 'none';
+        musicDisplayFallback.style.display = 'block';
+        musicDisplayFallback.innerHTML = '<p>Select a file to display and play.</p>';
+        partsListContainer.innerHTML = '<p>Load a score to see individual parts.</p>';
+        playPauseButton.disabled = true;
+        playPauseButton.textContent = 'Play';
+        stopButton.disabled = true;
+        currentSongTitle.textContent = 'No file selected';
+        currentScoreTracks = [];
+        selectedFileObject = null;
+         // Clear the file input visually, though this doesn't reset its internal state fully in all browsers.
+        // fileInput.value = null; // This can be problematic / have side effects. Optional.
+        console.log("Player UI reset.");
+    }
 
-    // --- Score Rendering (dependent on library) ---
-    // function renderScore(playerInstance) {
-    //     playerInstance.render(); // Or whatever method your library uses
-    //     musicDisplay.innerHTML = ''; // Clear loading message
-    //     musicDisplay.appendChild(playerInstance.getDisplayElement()); // Append the canvas/svg
-    // }
 
-    // --- Part Controls ---
-    function setupPartControls(parts) { // parts would be an array of objects like { id: 'P1', name: 'Part 1' }
-        partsListContainer.innerHTML = ''; // Clear previous part controls
+    // --- AlphaTab Part Controls ---
+    function setupAlphaTabPartControls(tracks) {
+        console.log("setupAlphaTabPartControls called with tracks:", tracks);
+        partsListContainer.innerHTML = '';
 
-        if (!parts || parts.length === 0) {
-            partsListContainer.innerHTML = '<p>No parts found in this score.</p>';
+        if (!tracks || tracks.length === 0) {
+            partsListContainer.innerHTML = '<p>No parts (tracks) found in this score.</p>';
+            console.log("No tracks found to set up controls.");
             return;
         }
+        console.log(`Setting up controls for ${tracks.length} tracks.`);
 
-        parts.forEach(part => {
+        tracks.forEach((track, index) => {
             const partDiv = document.createElement('div');
             partDiv.classList.add('part-controls-item');
-            partDiv.dataset.partId = part.id;
+            partDiv.dataset.trackIndex = index;
 
             const title = document.createElement('h4');
-            title.textContent = part.name || part.id; // Use part name if available
+            title.textContent = track.name || `Track ${index + 1}`;
             partDiv.appendChild(title);
 
-            // Mute button
             const muteButton = document.createElement('button');
-            muteButton.textContent = 'Mute';
-            muteButton.classList.add('mute-button');
-            muteButton.addEventListener('click', () => toggleMutePart(part.id, muteButton));
+            muteButton.textContent = track.playbackInfo.isMute ? 'Unmute' : 'Mute';
+            muteButton.addEventListener('click', () => toggleMuteTrack(track, muteButton));
             partDiv.appendChild(muteButton);
 
-            // Highlight button
             const highlightButton = document.createElement('button');
             highlightButton.textContent = 'Highlight';
-            highlightButton.classList.add('highlight-button');
-            highlightButton.addEventListener('click', () => toggleHighlightPart(part.id, partDiv));
+            highlightButton.addEventListener('click', () => toggleHighlightPartControl(partDiv, track));
             partDiv.appendChild(highlightButton);
 
-            // Volume slider
             const volumeLabel = document.createElement('label');
             volumeLabel.textContent = 'Volume:';
-            volumeLabel.htmlFor = `volume-${part.id}`;
+            volumeLabel.htmlFor = `volume-track-${index}`;
             const volumeSlider = document.createElement('input');
             volumeSlider.type = 'range';
-            volumeSlider.id = `volume-${part.id}`;
+            volumeSlider.id = `volume-track-${index}`;
             volumeSlider.min = '0';
             volumeSlider.max = '1';
             volumeSlider.step = '0.01';
-            volumeSlider.value = '0.75'; // Default part volume
-            volumeSlider.addEventListener('input', () => setPartVolume(part.id, volumeSlider.value));
-
+            volumeSlider.value = track.playbackInfo.volume;
+            volumeSlider.addEventListener('input', (e) => setTrackVolume(track, parseFloat(e.target.value)));
             partDiv.appendChild(volumeLabel);
             partDiv.appendChild(volumeSlider);
 
             partsListContainer.appendChild(partDiv);
         });
+        console.log("Part controls UI created.");
     }
 
-    function toggleMutePart(partId, button) {
-        // Logic to mute/unmute the part using your MusicXML library
-        // e.g., scorePlayer.mutePart(partId, !scorePlayer.isPartMuted(partId));
-        const isMuted = button.textContent === 'Unmute'; // Hypothetical
-        if (isMuted) {
-            button.textContent = 'Mute';
-            // scorePlayer.unmutePart(partId);
-            console.log(`Part ${partId} unmuted (simulated)`);
-        } else {
-            button.textContent = 'Unmute';
-            // scorePlayer.mutePart(partId);
-            console.log(`Part ${partId} muted (simulated)`);
-        }
-        // Update visual state if needed
-    }
-
-    let highlightedPartId = null;
-    function toggleHighlightPart(partId, partDiv) {
-        // Logic to highlight/unhighlight the part visually in the score display
-        // e.g., scorePlayer.highlightPart(partId); or scorePlayer.unhighlightPart(partId);
-        // This also needs to manage removing highlight from previously highlighted part
-
-        const isHighlighted = partDiv.classList.contains('part-highlighted-control');
-
-        // Remove highlight from any currently highlighted part's controls
-        document.querySelectorAll('.part-controls-item.part-highlighted-control').forEach(div => {
-            div.classList.remove('part-highlighted-control');
-            // scorePlayer.unhighlightVisualPart(div.dataset.partId); // Command to library to remove visual highlight
-        });
-        // Remove highlight from the score display itself (using library)
-        if (highlightedPartId && highlightedPartId !== partId) {
-            // scorePlayer.unhighlightVisualScorePart(highlightedPartId);
-             console.log(`Visual score part ${highlightedPartId} unhighlighted (simulated)`);
-        }
-
-
-        if (isHighlighted) {
-            partDiv.classList.remove('part-highlighted-control');
-            // scorePlayer.unhighlightVisualScorePart(partId); // Command to library
-            console.log(`Part ${partId} unhighlighted visually (simulated)`);
-            highlightedPartId = null;
-        } else {
-            partDiv.classList.add('part-highlighted-control');
-            // scorePlayer.highlightVisualScorePart(partId); // Command to library
-            console.log(`Part ${partId} highlighted visually (simulated)`);
-            highlightedPartId = partId;
-        }
-    }
-
-
-    function setPartVolume(partId, volume) {
-        // Logic to set volume for the part using your MusicXML library
-        // e.g., scorePlayer.setPartVolume(partId, parseFloat(volume));
-        console.log(`Part ${partId} volume set to ${volume} (simulated)`);
-    }
-
-    // --- Master Controls ---
-    masterVolumeSlider.addEventListener('input', (event) => {
-        const volume = parseFloat(event.target.value);
-        // Logic to set master volume using your MusicXML library or Web Audio API GainNode
-        // e.g., if (scorePlayer) scorePlayer.setMasterVolume(volume);
-        // Or if using a master gain node: masterGainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-        console.log(`Master Volume set to ${volume} (simulated)`);
-    });
-
-    masterCentsSlider.addEventListener('input', (event) => {
-        const cents = parseInt(event.target.value);
-        centsValueDisplay.textContent = `${cents} cents`;
-        // Logic to adjust pitch (cents) using your MusicXML library or Web Audio API
-        // This is more complex, might involve DetuneNode for each part or global detune if library supports
-        // e.g., if (scorePlayer) scorePlayer.setDetune(cents);
-        console.log(`Master pitch shift set to ${cents} cents (simulated)`);
-    });
-
-    playPauseButton.addEventListener('click', () => {
-        if (!selectedFile || !scorePlayer) { // Check if scorePlayer is initialized
-            alert("Please load a MusicXML file first.");
+    function toggleMuteTrack(track, button) {
+        if (!alphaTabApi || !track || !track.playbackInfo) {
+            console.error("Cannot toggle mute: AlphaTab API or track/playbackInfo missing.");
             return;
         }
-        // Logic to play/pause using your MusicXML library
-        // if (scorePlayer.isPlaying()) {
-        //     scorePlayer.pause();
-        //     playPauseButton.textContent = 'Play';
-        // } else {
-        //     scorePlayer.play();
-        //     playPauseButton.textContent = 'Pause';
-        // }
-        if (playPauseButton.textContent === 'Play') {
-            console.log('Playback started (simulated)');
-            playPauseButton.textContent = 'Pause';
-        } else {
-            console.log('Playback paused (simulated)');
-            playPauseButton.textContent = 'Play';
+        track.playbackInfo.isMute = !track.playbackInfo.isMute;
+        button.textContent = track.playbackInfo.isMute ? 'Unmute' : 'Mute';
+        console.log(`Track "${track.name}" mute toggled to: ${track.playbackInfo.isMute}`);
+        // AlphaTab usually picks up playbackInfo changes automatically for subsequent playback actions.
+        // If real-time update during playback is needed and not happening, an explicit player update might be required.
+    }
+
+    let highlightedPartControlDiv = null;
+    function toggleHighlightPartControl(partDiv, track) {
+        console.log(`toggleHighlightPartControl for track: ${track.name}`);
+        if (highlightedPartControlDiv === partDiv) { // If already highlighted, unhighlight it
+            partDiv.classList.remove('part-control-highlighted');
+            highlightedPartControlDiv = null;
+            console.log(`Track "${track.name}" UI highlight removed.`);
+            // TODO: Advanced - Remove actual score highlight if implemented
+        } else { // Highlight this part, and unhighlight any other
+            if (highlightedPartControlDiv) {
+                highlightedPartControlDiv.classList.remove('part-control-highlighted');
+            }
+            partDiv.classList.add('part-control-highlighted');
+            highlightedPartControlDiv = partDiv;
+            console.log(`Track "${track.name}" UI highlight added.`);
+            // TODO: Advanced - Implement actual score highlighting for this track.
         }
-    });
+    }
 
-    stopButton.addEventListener('click', () => {
-        if (!selectedFile || !scorePlayer) return;
-        // Logic to stop playback and reset cursor using your MusicXML library
-        // scorePlayer.stop();
-        // playPauseButton.textContent = 'Play';
-        console.log('Playback stopped (simulated)');
-        playPauseButton.textContent = 'Play';
-    });
+    function setTrackVolume(track, volume) {
+        if (!alphaTabApi || !track || !track.playbackInfo) {
+            console.error("Cannot set track volume: AlphaTab API or track/playbackInfo missing.");
+            return;
+        }
+        track.playbackInfo.volume = volume;
+        // console.log(`Track "${track.name}" volume set to: ${volume}`); // Can be noisy
+    }
 
-    // --- Helper function to initialize player controls (call after loading a score) ---
-    // function setupPlayerControls(player) {
-    //     playPauseButton.onclick = () => {
-    //         if (player.isPlaying) {
-    //             player.pause();
-    //             playPauseButton.textContent = 'Play';
-    //         } else {
-    //             player.play();
-    //             playPauseButton.textContent = 'Pause';
-    //         }
-    //     };
-    //     stopButton.onclick = () => {
-    //         player.stop();
-    //         playPauseButton.textContent = 'Play';
-    //     };
-    //     masterVolumeSlider.oninput = (e) => player.setMasterVolume(parseFloat(e.target.value));
-    //     masterCentsSlider.oninput = (e) => {
-    //         const cents = parseInt(e.target.value);
-    //         centsValueDisplay.textContent = `${cents} cents`;
-    //         player.setGlobalDetune(cents); // Example method
-    //     };
-    // }
 
-    // Initial message
-    partsListContainer.innerHTML = '<p>Select a MusicXML file or folder to begin.</p>';
+    // --- AlphaTab Master Player Controls ---
+    // This function should be called once after AlphaTab is initialized with a score.
+    function setupAlphaTabPlayerControls() {
+        console.log("setupAlphaTabPlayerControls called.");
+        if (!alphaTabApi || !alphaTabApi.player) {
+            console.error("Cannot setup player controls: AlphaTab API or player not ready.");
+            return;
+        }
+
+        // Ensure event listeners are not duplicated if this function is called multiple times
+        // A simple way is to reassign onclick, or use removeEventListener before adding.
+        // For sliders, 'input' listeners are typically fine to re-add if the element is the same,
+        // but good practice is to manage them. For this example, direct assignment is simpler.
+
+        masterVolumeSlider.oninput = (event) => { // Using oninput to replace previous if any
+            if (alphaTabApi && alphaTabApi.player) {
+                alphaTabApi.player.masterVolume = parseFloat(event.target.value);
+            }
+        };
+        // Set initial value just in case from slider
+        alphaTabApi.player.masterVolume = parseFloat(masterVolumeSlider.value);
+
+        masterCentsSlider.oninput = (event) => { // Using oninput
+            if (alphaTabApi && alphaTabApi.player) {
+                const cents = parseInt(event.target.value);
+                alphaTabApi.player.masterTune = cents;
+                centsValueDisplay.textContent = `${cents} cents`;
+            }
+        };
+        // Set initial value
+        const initialCents = parseInt(masterCentsSlider.value);
+        alphaTabApi.player.masterTune = initialCents;
+        centsValueDisplay.textContent = `${initialCents} cents`;
+
+        setA440Button.onclick = () => {
+            if (alphaTabApi && alphaTabApi.player) {
+                masterCentsSlider.value = 0;
+                alphaTabApi.player.masterTune = 0;
+                centsValueDisplay.textContent = `0 cents`;
+                console.log("Tuning set to A=440Hz (0 cents)");
+            }
+        };
+
+        setA415Button.onclick = () => {
+            if (alphaTabApi && alphaTabApi.player) {
+                const a415cents = -101;
+                masterCentsSlider.value = a415cents; // Update slider
+                alphaTabApi.player.masterTune = a415cents;
+                centsValueDisplay.textContent = `${a415cents} cents`;
+                console.log(`Tuning set to A=415Hz (${a415cents} cents)`);
+            }
+        };
+
+        playPauseButton.onclick = () => {
+            if (alphaTabApi && alphaTabApi.player) {
+                console.log("Play/Pause button clicked.");
+                alphaTabApi.player.playPause();
+            } else {
+                console.warn("Play/Pause clicked, but API or player not ready.");
+            }
+        };
+
+        stopButton.onclick = () => {
+            if (alphaTabApi && alphaTabApi.player) {
+                console.log("Stop button clicked.");
+                alphaTabApi.player.stop();
+            } else {
+                console.warn("Stop clicked, but API or player not ready.");
+            }
+        };
+        console.log("Master player controls event listeners reassigned/set.");
+    }
+
+    // Initial state setup
+    resetPlayer();
+    console.log("Initial player reset complete.");
 });
