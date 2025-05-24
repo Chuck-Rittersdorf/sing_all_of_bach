@@ -26,15 +26,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- File Handling ---
     fileInput.addEventListener('change', handleFileSelect);
-
-    function handleFileSelect(event) {
+    function handleFileSelection(event) {
         fileListDisplay.innerHTML = ''; // Clear previous list
-        musicFiles = Array.from(event.target.files).filter(file => file.name.endsWith('.xml') || file.name.endsWith('.musicxml'));
+        musicFiles = Array.from(event.target.files).filter(file =>
+            file.name.toLowerCase().endsWith('.xml') || file.name.toLowerCase().endsWith('.musicxml')
+        );
 
         if (musicFiles.length === 0) {
             const li = document.createElement('li');
-            li.textContent = 'No MusicXML files selected.';
+            li.textContent = 'No MusicXML files selected.'; // <-- Updated message
             fileListDisplay.appendChild(li);
+            currentSongTitle.textContent = 'No MusicXML files found.';
+            resetPlayer();
             return;
         }
 
